@@ -84,13 +84,10 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
     try {
       final deviceId = await _getDeviceHardwareId();
 
-      final GoogleSignIn googleSignIn = GoogleSignIn();
-      final googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
-        setState(() => isLoading = false);
-        return;
-      }
-
+      // Updated for google_sign_in v7+ API
+      final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+      final googleUser = await googleSignIn.authenticate();
+      
       final googleAuth = await googleUser.authentication;
       final accessToken = googleAuth.accessToken;
       final idToken = googleAuth.idToken;
@@ -232,7 +229,7 @@ class _EarnScreenState extends State<EarnScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.redAccent),
             onPressed: () async {
-              await GoogleSignIn().signOut();
+              await GoogleSignIn.instance.signOut();
               await _supabase.auth.signOut();
             },
           )
