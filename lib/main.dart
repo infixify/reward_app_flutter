@@ -93,55 +93,51 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
-  setState(() => isLoading = true);
-  try {
-    final deviceId = await _getDeviceHardwareId();
+    setState(() => isLoading = true);
+    try {
+      final deviceId = await _getDeviceHardwareId();
 
-    // 1. PRE-CHECK: Ask Supabase if this device is already claimed BEFORE signing in
-    final checkResponse = await _supabase.rpc(
-      'check_device_registered',
-      params: {'input_device_id': deviceId},
-    );
+      final checkResponse = await _supabase.rpc(
+        'check_device_registered',
+        params: {'input_device_id': deviceId},
+      );
 
-    if (checkResponse != null && checkResponse['registered'] == true) {
-      final registeredEmail = checkResponse['email'];
-      throw 'YOUR DEVICE IS ALREADY REGISTERED WITH $registeredEmail. Multi-accounts are not allowed!';
-    }
+      if (checkResponse != null && checkResponse['registered'] == true) {
+        final registeredEmail = checkResponse['email'];
+        throw 'YOUR DEVICE IS ALREADY REGISTERED WITH $registeredEmail. Multi-accounts are not allowed!';
+      }
 
-    final GoogleSignIn googleSignIn = GoogleSignIn.instance;
-    await googleSignIn.initialize(
-      serverClientId: '881444436109-k398gv3fnl238ah3s1bbom8v5bdod55t.apps.googleusercontent.com',
-    );
+      final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+      await googleSignIn.initialize(
+        serverClientId: '881444436109-k398gv3fnl238ah3s1bbom8v5bdod55t.apps.googleusercontent.com',
+      );
 
-    final googleUser = await googleSignIn.authenticate();
-    if (googleUser == null) {
-      setState(() => isLoading = false);
-      return;
-    }
+      final googleUser = await googleSignIn.authenticate();
+      if (googleUser == null) {
+        setState(() => isLoading = false);
+        return;
+      }
 
-    final googleAuth = await googleUser.authentication;
-    final idToken = googleAuth.idToken;
-    if (idToken == null) throw 'Google Authentication Failed: Missing ID Token.';
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      if (idToken == null) throw 'Google Authentication Failed: Missing ID Token.';
 
-    // 2. Now safe to sign in since device is clean
-    final response = await _supabase.auth.signInWithIdToken(
-      provider: OAuthProvider.google,
-      idToken: idToken,
-    );
+      final response = await _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+      );
 
-    final user = response.user;
-    if (user == null) throw 'Login error occurred.';
+      final user = response.user;
+      if (user == null) throw 'Login error occurred.';
 
-    // 3. Link the device ID to the user profile
-    await _supabase.from('users').update({
-      'device_id': deviceId,
-    }).eq('id', user.id);
+      await _supabase.from('users').update({
+        'device_id': deviceId,
+      }).eq('id', user.id);
 
-  } catch (e) {
+    } catch (e) {
       await _supabase.auth.signOut();
       await GoogleSignIn.instance.signOut();
       
-      // Clean up technical exception text into a readable user warning
       String rawError = e.toString().replaceAll('Exception: ', '');
       String cleanMessage = rawError;
       
@@ -156,11 +152,10 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
           duration: const Duration(seconds: 5),
         ),
       );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
   }
-  } finally {
-    if (mounted) setState(() => isLoading = false);
-  }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -297,14 +292,14 @@ class _EarnScreenState extends State<EarnScreen> {
                   const SnackBar(content: Text('Reward Added: +10 Coins!')),
                 );
               } catch (e) {
-  String cleanError = e.toString().replaceAll('Exception: ', '');
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text('Could not complete reward: $cleanError', style: const TextStyle(color: Colors.white)),
-      backgroundColor: Colors.redAccent,
-    ),
-  );
-}
+                String cleanError = e.toString().replaceAll('Exception: ', '');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Could not complete reward: $cleanError', style: const TextStyle(color: Colors.white)),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+              }
             },
           ),
         ],
