@@ -87,7 +87,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       final GoogleSignIn googleSignIn = GoogleSignIn.instance;
       // Initialize is strictly required in google_sign_in v7+ before calling authenticate
       await googleSignIn.initialize(
-  serverClientId: 'AAPKA_WEB_CLIENT_ID_YAHAN_DAALEIN',
+  serverClientId: '881444436109-k398gv3fnl238ah3s1bbom8v5bdod55t.apps.googleusercontent.com',
 );
 
       final googleUser = await googleSignIn.authenticate();
