@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "727476527324",
+    "project_id": "earnify-ea49f",
+    "storage_bucket": "earnify-ea49f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:727476527324:android:be0d8f6dc6881740589419",
+        "android_client_info": {
+          "package_name": "com.example.reward_app_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDL084yav_1WQ9kOXxKYFy_I3cyNZr-LrA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
