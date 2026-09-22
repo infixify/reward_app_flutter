@@ -98,10 +98,9 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       final deviceId = await _getDeviceHardwareId();
 
       final GoogleSignIn googleSignIn = GoogleSignIn.instance;
-      // Initialize is strictly required in google_sign_in v7+ before calling authenticate
       await googleSignIn.initialize(
-  serverClientId: '881444436109-k398gv3fnl238ah3s1bbom8v5bdod55t.apps.googleusercontent.com',
-);
+        serverClientId: '881444436109-k398gv3fnl238ah3s1bbom8v5bdod55t.apps.googleusercontent.com',
+      );
 
       final googleUser = await googleSignIn.authenticate();
       if (googleUser == null) {
@@ -109,7 +108,6 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
         return;
       }
 
-      // v7+ syntax: Get only the ID token
       final googleAuth = await googleUser.authentication;
       final idToken = googleAuth.idToken;
 
@@ -117,7 +115,6 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
         throw 'Google Authentication Failed: Missing ID Token.';
       }
 
-      // Authenticate with Supabase using only the idToken
       final response = await _supabase.auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
@@ -128,45 +125,45 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
 
       final email = user.email ?? '';
 
-      // --- 1-ACCOUNT PER DEVICE & BOUND GMAIL SECURITY CHECK ---
-      final deviceRecord = await _supabase
+      // --- 1. Check if this device is claimed by someone else ---
+      final deviceOwner = await _supabase
           .from('users')
-          .select()
+          .select('id, email')
           .eq('device_id', deviceId!)
           .maybeSingle();
 
-      if (deviceRecord != null) {
-        if (deviceRecord['email'] != email) {
-          await _supabase.auth.signOut();
-          await googleSignIn.signOut();
-          throw 'YOUR DEVICE IS ALREADY REGISTERED WITH ${deviceRecord['email']}. Please login with the registered gmail.';
-        }
-      } else {
-        final emailRecord = await _supabase
-            .from('users')
-            .select()
-            .eq('email', email)
-            .maybeSingle();
-
-        if (emailRecord != null) {
-          await _supabase.auth.signOut();
-          await googleSignIn.signOut();
-          throw 'This Gmail is already linked to another device!';
-        }
-
-        await _supabase.from('users').insert({
-          'id': user.id,
-          'email': email,
-          'device_id': deviceId,
-          'coin_balance': 0,
-        });
+      if (deviceOwner != null && deviceOwner['id'] != user.id) {
+        throw 'YOUR DEVICE IS ALREADY REGISTERED WITH ${deviceOwner['email']}. Please login with the registered gmail.';
       }
+
+      // --- 2. Check if this Gmail is already linked to a different device ---
+      final emailOwner = await _supabase
+          .from('users')
+          .select('id, device_id')
+          .eq('email', email)
+          .maybeSingle();
+
+      if (emailOwner != null && emailOwner['device_id'] != null && emailOwner['device_id'] != deviceId) {
+        throw 'This Gmail is already linked to another device!';
+      }
+
+      // --- 3. Save the device ID to the user's profile ---
+      // Because your SQL trigger already inserted the row, we just UPDATE it!
+      await _supabase.from('users').update({
+        'email': email,
+        'device_id': deviceId,
+      }).eq('id', user.id);
+
     } catch (e) {
+      // If ANY security check fails, force sign them out immediately
+      await _supabase.auth.signOut();
+      await GoogleSignIn.instance.signOut();
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(e.toString().replaceAll('Exception: ', ''), style: const TextStyle(color: Colors.white)),
           backgroundColor: Colors.redAccent,
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
         ),
       );
     } finally {
