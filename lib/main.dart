@@ -84,22 +84,28 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
     try {
       final deviceId = await _getDeviceHardwareId();
 
-      // Updated for google_sign_in v7+ API
       final GoogleSignIn googleSignIn = GoogleSignIn.instance;
-      final googleUser = await googleSignIn.authenticate();
-      
-      final googleAuth = await googleUser.authentication;
-      final accessToken = googleAuth.accessToken;
-      final idToken = googleAuth.idToken;
+      // Initialize is strictly required in google_sign_in v7+ before calling authenticate
+      await googleSignIn.initialize(); 
 
-      if (accessToken == null || idToken == null) {
-        throw 'Google Authentication Failed.';
+      final googleUser = await googleSignIn.authenticate();
+      if (googleUser == null) {
+        setState(() => isLoading = false);
+        return;
       }
 
+      // v7+ syntax: Get only the ID token
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw 'Google Authentication Failed: Missing ID Token.';
+      }
+
+      // Authenticate with Supabase using only the idToken
       final response = await _supabase.auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
-        accessToken: accessToken,
       );
 
       final user = response.user;
