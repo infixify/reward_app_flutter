@@ -138,16 +138,25 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
     }).eq('id', user.id);
 
   } catch (e) {
-    await _supabase.auth.signOut();
-    await GoogleSignIn.instance.signOut();
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(e.toString().replaceAll('Exception: ', ''), style: const TextStyle(color: Colors.white)),
-        backgroundColor: Colors.redAccent,
-        duration: const Duration(seconds: 5),
-      ),
-    );
+      await _supabase.auth.signOut();
+      await GoogleSignIn.instance.signOut();
+      
+      // Clean up technical exception text into a readable user warning
+      String rawError = e.toString().replaceAll('Exception: ', '');
+      String cleanMessage = rawError;
+      
+      if (rawError.contains('GoogleSignInExceptionCode.canceled') || rawError.contains('code 16')) {
+        cleanMessage = 'Google Sign-In was canceled or re-auth failed. Please try again.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(cleanMessage, style: const TextStyle(color: Colors.white)),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+  }
   } finally {
     if (mounted) setState(() => isLoading = false);
   }
@@ -288,8 +297,14 @@ class _EarnScreenState extends State<EarnScreen> {
                   const SnackBar(content: Text('Reward Added: +10 Coins!')),
                 );
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-              }
+  String cleanError = e.toString().replaceAll('Exception: ', '');
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('Could not complete reward: $cleanError', style: const TextStyle(color: Colors.white)),
+      backgroundColor: Colors.redAccent,
+    ),
+  );
+}
             },
           ),
         ],
