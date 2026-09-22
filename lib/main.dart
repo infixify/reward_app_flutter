@@ -95,18 +95,6 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
   Future<void> _signInWithGoogle() async {
     setState(() => isLoading = true);
     try {
-      final deviceId = await _getDeviceHardwareId();
-
-      final checkResponse = await _supabase.rpc(
-        'check_device_registered',
-        params: {'input_device_id': deviceId},
-      );
-
-      if (checkResponse != null && checkResponse['registered'] == true) {
-        final registeredEmail = checkResponse['email'];
-        throw 'YOUR DEVICE IS ALREADY REGISTERED WITH $registeredEmail. Multi-accounts are not allowed!';
-      }
-
       final GoogleSignIn googleSignIn = GoogleSignIn.instance;
       await googleSignIn.initialize(
         serverClientId: '881444436109-k398gv3fnl238ah3s1bbom8v5bdod55t.apps.googleusercontent.com',
@@ -130,6 +118,8 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       final user = response.user;
       if (user == null) throw 'Login error occurred.';
 
+      // Save or update device ID for referral anti-farming tracking without blocking login
+      final deviceId = await _getDeviceHardwareId();
       await _supabase.from('users').update({
         'device_id': deviceId,
       }).eq('id', user.id);
@@ -220,6 +210,60 @@ class EarnScreen extends StatefulWidget {
 
 class _EarnScreenState extends State<EarnScreen> {
   final _supabase = Supabase.instance.client;
+  final TextEditingController _referralController = TextEditingController();
+  bool isApplyingReferral = false;
+
+  Future<String?> _getDeviceHardwareId() async {
+    final deviceInfo = DeviceInfoPlugin();
+    if (Platform.isAndroid) {
+      final androidInfo = await deviceInfo.androidInfo;
+      return androidInfo.id;
+    } else if (Platform.isIOS) {
+      final iosInfo = await deviceInfo.iosInfo;
+      return iosInfo.identifierForVendor;
+    }
+    return 'unknown_device';
+  }
+
+  Future<void> _applyReferralCode() async {
+    final code = _referralController.text.trim();
+    if (code.isEmpty) return;
+
+    setState(() => isApplyingReferral = true);
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      final deviceId = await _getDeviceHardwareId();
+
+      // Call our secure PostgreSQL RPC function
+      final response = await _supabase.rpc(
+        'apply_referral_code',
+        params: {
+          'input_code': code,
+          'current_user_id': user.id,
+          'current_device_id': deviceId,
+        },
+      );
+
+      if (response['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response['message']), backgroundColor: Colors.green),
+        );
+        _referralController.clear();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response['message']), backgroundColor: Colors.redAccent),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => isApplyingReferral = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -249,27 +293,113 @@ class _EarnScreenState extends State<EarnScreen> {
                 return const Card(child: Padding(padding: EdgeInsets.all(24.0), child: Center(child: CircularProgressIndicator())));
               }
 
-              final balance = snapshot.data!.first['coin_balance'] ?? 0;
+              final userData = snapshot.data!.first;
+              final balance = userData['coin_balance'] ?? 0;
+              final myCode = userData['referral_code'] ?? 'Loading...';
+              final hasUsedReferral = userData['referred_by'] != null;
 
-              return Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Colors.indigo, Colors.deepPurple]),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    const Text('Your Wallet Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
-                    const SizedBox(height: 10),
-                    Text('$balance Coins', style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    Text('${user.email}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
-                  ],
-                ),
+              return Column(
+                children: [
+                  // Wallet Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Colors.indigo, Colors.deepPurple]),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text('Your Wallet Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                        const SizedBox(height: 10),
+                        Text('$balance Coins', style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        Text('${user.email}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Refer & Earn Section Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.indigoAccent.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Refer & Earn', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                        const SizedBox(height: 8),
+                        const Text('Share your code with friends. Earn rewards when they join and play!', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                        const SizedBox(height: 16),
+                        
+                        // Display User's Referral Code
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Your Referral Code:', style: TextStyle(color: Colors.white70)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(color: Colors.indigo.withOpacity(0.4), borderRadius: BorderRadius.circular(8)),
+                              child: Text(myCode, style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 32, color: Colors.white24),
+
+                        // Enter Code Section (Only if they haven't used one yet)
+                        if (!hasUsedReferral) ...[
+                          const Text('Have a friend’s referral code?', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _referralController,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter code here',
+                                    hintStyle: const TextStyle(color: Colors.grey),
+                                    filled: true,
+                                    fillColor: const Color(0xFF0F172A),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.indigoAccent,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: isApplyingReferral ? null : _applyReferralCode,
+                                child: isApplyingReferral 
+                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Text('Apply', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ] else ...[
+                          const Center(
+                            child: Text('✓ You have already redeemed a referral code.', style: TextStyle(color: Colors.greenAccent, fontSize: 13)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               );
             },
           ),
           const SizedBox(height: 24),
+          
+          // Watch Ad Button
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.indigoAccent,
