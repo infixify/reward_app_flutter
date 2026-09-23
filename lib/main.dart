@@ -16,22 +16,51 @@ const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
   
-  // Initialize Google Mobile Ads SDK
-  MobileAds.instance.initialize();
-  
-  await Firebase.initializeApp();
-  final messaging = FirebaseMessaging.instance;
-  await messaging.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-  final String? fcmToken = await messaging.getToken();
-  print('FCM Token for this device: $fcmToken');
+  try {
+    // 1. Supabase Init
+    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
+    
+    // 2. AdMob Init
+    MobileAds.instance.initialize();
+    
+    // 3. Firebase Init
+    await Firebase.initializeApp();
+    final messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    final String? fcmToken = await messaging.getToken();
+    print('FCM Token for this device: $fcmToken');
 
-  runApp(const RewardApp());
+    // Agar sab theek raha toh app normal chalegi
+    runApp(const RewardApp());
+    
+  } catch (e, stackTrace) {
+    // Agar koi crash hua toh seedha screen par print hoga
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: SingleChildScrollView(
+                child: Text(
+                  'APP STARTUP ERROR:\n\n$e\n\n$stackTrace',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.left,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class RewardApp extends StatelessWidget {
@@ -234,10 +263,9 @@ class _EarnScreenState extends State<EarnScreen> {
   @override
   void initState() {
     super.initState();
-    _saveFcmToken(); // App khulte hi FCM token DB me save hoga
+    _saveFcmToken(); 
   }
 
-  // Naya Function: FCM Token Database me Save karne ke liye
   Future<void> _saveFcmToken() async {
     try {
       final messaging = FirebaseMessaging.instance;
@@ -317,7 +345,7 @@ class _EarnScreenState extends State<EarnScreen> {
       final response = await _supabase.rpc('claim_reward_action', params: {
         'p_user_id': user.id,
         'p_action_type': 'daily_bonus',
-        'p_reward_amount': 50, // 50 coins ka daily bonus
+        'p_reward_amount': 50,
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -338,7 +366,6 @@ class _EarnScreenState extends State<EarnScreen> {
   void _loadRewardedAd() {
     setState(() => _isAdLoading = true);
     
-    // Official Google Test Rewarded Ad Unit ID.
     const adUnitId = 'ca-app-pub-3940256099942544/5224354917'; 
 
     RewardedAd.load(
@@ -378,11 +405,10 @@ class _EarnScreenState extends State<EarnScreen> {
           final user = _supabase.auth.currentUser;
           if (user == null) return;
 
-          // Ad complete hone par backend validation function run hoga
           final response = await _supabase.rpc('claim_reward_action', params: {
             'p_user_id': user.id,
             'p_action_type': 'ad',
-            'p_reward_amount': 10, // 10 coins per ad
+            'p_reward_amount': 10,
           });
 
           ScaffoldMessenger.of(context).showSnackBar(
