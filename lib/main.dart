@@ -5,6 +5,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 const supabaseUrl = 'https://figpskarzodfeiaulmfa.supabase.co';
 const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
@@ -12,6 +13,9 @@ const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
+  
+  // Initialize Google Mobile Ads SDK
+  MobileAds.instance.initialize();
   
   await Firebase.initializeApp();
   final messaging = FirebaseMessaging.instance;
@@ -118,7 +122,6 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       final user = response.user;
       if (user == null) throw 'Login error occurred.';
 
-      // Save or update device ID for referral anti-farming tracking without blocking login
       final deviceId = await _getDeviceHardwareId();
       await _supabase.from('users').update({
         'device_id': deviceId,
@@ -213,6 +216,10 @@ class _EarnScreenState extends State<EarnScreen> {
   final TextEditingController _referralController = TextEditingController();
   bool isApplyingReferral = false;
 
+  // AdMob Rewarded Ad variables
+  RewardedAd? _rewardedAd;
+  bool _isAdLoading = false;
+
   Future<String?> _getDeviceHardwareId() async {
     final deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) {
@@ -236,7 +243,6 @@ class _EarnScreenState extends State<EarnScreen> {
 
       final deviceId = await _getDeviceHardwareId();
 
-      // Call our secure PostgreSQL RPC function
       final response = await _supabase.rpc(
         'apply_referral_code',
         params: {
@@ -263,6 +269,218 @@ class _EarnScreenState extends State<EarnScreen> {
     } finally {
       if (mounted) setState(() => isApplyingReferral = false);
     }
+  }
+
+  void _loadRewardedAd() {
+    setState(() => _isAdLoading = true);
+    
+    // Official Google Test Rewarded Ad Unit ID. Replace with live ID before final production.
+    const adUnitId = 'ca-app-pub-3940256099942544/5224354917'; 
+
+    RewardedAd.load(
+      adUnitId: adUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (RewardedAd ad) {
+          _rewardedAd = ad;
+          setState(() => _isAdLoading = false);
+          _showRewardedAd();
+        },
+        onAdFailedToLoad: (LoadAdError error) {
+          setState(() => _isAdLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ad failed to load. Please try again later.'), backgroundColor: Colors.redAccent),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showRewardedAd() {
+    if (_rewardedAd == null) return;
+
+    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (RewardedAd ad) {
+        ad.dispose();
+        _loadRewardedAd();
+      },
+      onAdFailedToShowFullScreenContent: (RewardedAd ad, AdError error) {
+        ad.dispose();
+        _loadRewardedAd();
+      },
+    );
+
+    _rewardedAd!.show(
+      onUserEarnedReward: (AdWithoutView ad, RewardItem reward) async {
+        try {
+          final user = _supabase.auth.currentUser;
+          if (user == null) return;
+
+          final currentResp = await _supabase.from('users').select('coin_balance').eq('id', user.id).single();
+          int currentBalance = currentResp['coin_balance'] ?? 0;
+          
+          await _supabase.from('users').update({
+            'coin_balance': currentBalance + 10,
+          }).eq('id', user.id);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Reward Added: +10 Coins!'), backgroundColor: Colors.green),
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error crediting reward: ${e.toString()}'), backgroundColor: Colors.redAccent),
+          );
+        }
+      },
+    );
+    _rewardedAd = null;
+  }
+
+  Widget _buildWithdrawalSection(BuildContext context, String userId) {
+    final TextEditingController amountController = TextEditingController();
+    final TextEditingController upiController = TextEditingController();
+
+    void showWithdrawDialog() {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text('Request Withdrawal', style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Amount (Coins)',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: upiController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'UPI ID / Phone Number',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.indigoAccent),
+              onPressed: () async {
+                final amount = int.tryParse(amountController.text.trim()) ?? 0;
+                final upi = upiController.text.trim();
+
+                if (amount <= 0 || upi.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter valid withdrawal details.'), backgroundColor: Colors.redAccent),
+                  );
+                  return;
+                }
+
+                try {
+                  await _supabase.from('withdrawals').insert({
+                    'user_id': userId,
+                    'amount': amount,
+                    'payment_method': 'UPI',
+                    'payment_details': upi,
+                    'status': 'pending',
+                  });
+
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Withdrawal request submitted successfully!'), backgroundColor: Colors.green),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.redAccent),
+                  );
+                }
+              },
+              child: const Text('Submit', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.indigoAccent.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Withdrawal History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(horizontal: 12)),
+                onPressed: showWithdrawDialog,
+                child: const Text('Withdraw', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _supabase
+                .from('withdrawals')
+                .stream(primaryKey: ['id'])
+                .eq('user_id', userId)
+                .order('created_at', ascending: false),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final withdrawals = snapshot.data!;
+              if (withdrawals.isEmpty) {
+                return const Text('No withdrawal history found.', style: TextStyle(color: Colors.grey, fontSize: 13));
+              }
+
+              return ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: withdrawals.length,
+                itemBuilder: (context, index) {
+                  final item = withdrawals[index];
+                  final amount = item['amount'];
+                  final status = item['status'];
+                  final upi = item['payment_details'];
+
+                  Color statusColor = Colors.orange;
+                  if (status == 'approved') statusColor = Colors.green;
+                  if (status == 'rejected') statusColor = Colors.redAccent;
+
+                  return Card(
+                    color: const Color(0xFF0F172A),
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    child: ListTile(
+                      title: Text('$amount Coins ($upi)', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                      subtitle: Text('Status: ${status.toUpperCase()}', style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                      trailing: const Icon(Icons.history, color: Colors.grey),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -300,7 +518,6 @@ class _EarnScreenState extends State<EarnScreen> {
 
               return Column(
                 children: [
-                  // Wallet Card
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -319,8 +536,6 @@ class _EarnScreenState extends State<EarnScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // Refer & Earn Section Card
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -336,8 +551,6 @@ class _EarnScreenState extends State<EarnScreen> {
                         const SizedBox(height: 8),
                         const Text('Share your code with friends. Earn rewards when they join and play!', style: TextStyle(color: Colors.grey, fontSize: 13)),
                         const SizedBox(height: 16),
-                        
-                        // Display User's Referral Code
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -350,8 +563,6 @@ class _EarnScreenState extends State<EarnScreen> {
                           ],
                         ),
                         const Divider(height: 32, color: Colors.white24),
-
-                        // Enter Code Section (Only if they haven't used one yet)
                         if (!hasUsedReferral) ...[
                           const Text('Have a friend’s referral code?', style: TextStyle(color: Colors.white70, fontSize: 13)),
                           const SizedBox(height: 8),
@@ -399,7 +610,9 @@ class _EarnScreenState extends State<EarnScreen> {
           ),
           const SizedBox(height: 24),
           
-          // Watch Ad Button
+          _buildWithdrawalSection(context, user.id),
+
+          const SizedBox(height: 24),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.indigoAccent,
@@ -408,29 +621,8 @@ class _EarnScreenState extends State<EarnScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             icon: const Icon(Icons.video_library),
-            label: const Text('Watch Ad (+10 Coins)', style: TextStyle(fontSize: 16)),
-            onPressed: () async {
-              try {
-                final currentResp = await _supabase.from('users').select('coin_balance').eq('id', user.id).single();
-                int currentBalance = currentResp['coin_balance'] ?? 0;
-                
-                await _supabase.from('users').update({
-                  'coin_balance': currentBalance + 10,
-                }).eq('id', user.id);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Reward Added: +10 Coins!')),
-                );
-              } catch (e) {
-                String cleanError = e.toString().replaceAll('Exception: ', '');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Could not complete reward: $cleanError', style: const TextStyle(color: Colors.white)),
-                    backgroundColor: Colors.redAccent,
-                  ),
-                );
-              }
-            },
+            label: Text(_isAdLoading ? 'Loading Ad...' : 'Watch Ad (+10 Coins)', style: const TextStyle(fontSize: 16)),
+            onPressed: _isAdLoading ? null : _loadRewardedAd,
           ),
         ],
       ),
