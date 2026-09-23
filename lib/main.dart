@@ -7,6 +7,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+// Nayi screens ke imports
+import 'spin_screen.dart';
+import 'scratch_screen.dart';
+
 const supabaseUrl = 'https://figpskarzodfeiaulmfa.supabase.co';
 const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 
@@ -225,6 +229,7 @@ class _EarnScreenState extends State<EarnScreen> {
   // AdMob Rewarded Ad variables
   RewardedAd? _rewardedAd;
   bool _isAdLoading = false;
+  bool _isClaimingDaily = false;
 
   Future<String?> _getDeviceHardwareId() async {
     final deviceInfo = DeviceInfoPlugin();
@@ -277,10 +282,40 @@ class _EarnScreenState extends State<EarnScreen> {
     }
   }
 
+  // Naya Function: Daily Bonus Claim karne ke liye
+  Future<void> _claimDailyBonus() async {
+    if (_isClaimingDaily) return;
+    setState(() => _isClaimingDaily = true);
+
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      final response = await _supabase.rpc('claim_reward_action', params: {
+        'p_user_id': user.id,
+        'p_action_type': 'daily_bonus',
+        'p_reward_amount': 50, // 50 coins ka daily bonus
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(response['message']), 
+          backgroundColor: response['success'] == true ? Colors.green : Colors.orangeAccent,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => _isClaimingDaily = false);
+    }
+  }
+
   void _loadRewardedAd() {
     setState(() => _isAdLoading = true);
     
-    // Official Google Test Rewarded Ad Unit ID. Replace with live ID before final production.
+    // Official Google Test Rewarded Ad Unit ID.
     const adUnitId = 'ca-app-pub-3940256099942544/5224354917'; 
 
     RewardedAd.load(
@@ -320,15 +355,18 @@ class _EarnScreenState extends State<EarnScreen> {
           final user = _supabase.auth.currentUser;
           if (user == null) return;
 
-          final currentResp = await _supabase.from('users').select('coin_balance').eq('id', user.id).single();
-          int currentBalance = currentResp['coin_balance'] ?? 0;
-          
-          await _supabase.from('users').update({
-            'coin_balance': currentBalance + 10,
-          }).eq('id', user.id);
+          // Ad complete hone par backend validation function run hoga
+          final response = await _supabase.rpc('claim_reward_action', params: {
+            'p_user_id': user.id,
+            'p_action_type': 'ad',
+            'p_reward_amount': 10, // 10 coins per ad
+          });
 
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Reward Added: +10 Coins!'), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text(response['message']), 
+              backgroundColor: response['success'] == true ? Colors.green : Colors.redAccent,
+            ),
           );
         } catch (e) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -487,7 +525,7 @@ class _EarnScreenState extends State<EarnScreen> {
     );
   }
 
-  // UPDATED: 3x2 Earning Grid with Surveys & Daily Bonus
+  // Earning Grid - Links Connected!
   Widget _buildEarningGrid(BuildContext context) {
     return GridView.count(
       crossAxisCount: 2,
@@ -502,9 +540,8 @@ class _EarnScreenState extends State<EarnScreen> {
           icon: Icons.rotate_right,
           color: Colors.deepPurpleAccent,
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Spin Wheel Coming Soon!')),
-            );
+            // Nayi SpinScreen par navigation
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const SpinScreen()));
           },
         ),
         _buildActionCard(
@@ -513,9 +550,8 @@ class _EarnScreenState extends State<EarnScreen> {
           icon: Icons.layers,
           color: Colors.amber.shade700,
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Scratch Cards Coming Soon!')),
-            );
+            // Nayi ScratchScreen par navigation
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const ScratchScreen()));
           },
         ),
         _buildActionCard(
@@ -556,11 +592,7 @@ class _EarnScreenState extends State<EarnScreen> {
           subtitle: "Claim every 24h",
           icon: Icons.card_giftcard,
           color: Colors.green,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Daily Bonus Coming Soon!')),
-            );
-          },
+          onTap: _isClaimingDaily ? () {} : _claimDailyBonus,
         ),
       ],
     );
