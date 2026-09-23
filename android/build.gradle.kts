@@ -1,10 +1,14 @@
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
+plugins {
+        id("com.google.gms.google-services") version "4.4.2" apply false
+        }
+        
+        allprojects {
+                repositories {
+                            google()
+                                    mavenCentral()
+                                        }
+                                        }
+                                        
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")
