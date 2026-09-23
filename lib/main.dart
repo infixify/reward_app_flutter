@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-// Nayi screens ke imports
 import 'spin_screen.dart';
 import 'scratch_screen.dart';
 
@@ -14,9 +15,14 @@ const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Sirf Supabase initialize karein taaki app 100% stable chale bina kisi crash ke
-  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
-  
+  try {
+    await Firebase.initializeApp();
+    await MobileAds.instance.initialize();
+    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
+  } catch (e) {
+    debugPrint("Initialization Error: $e");
+  }
+
   runApp(const RewardApp());
 }
 
@@ -212,6 +218,48 @@ class _EarnScreenState extends State<EarnScreen> {
   final TextEditingController _referralController = TextEditingController();
   bool isApplyingReferral = false;
   bool _isClaimingDaily = false;
+  RewardedAd? _rewardedAd;
+  bool _isAdLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRewardedAd();
+  }
+
+  void _loadRewardedAd() {
+    RewardedAd.load(
+      adUnitId: 'ca-app-pub-3940256099942544/5224354917', // Test Ad Unit ID
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) {
+          setState(() {
+            _rewardedAd = ad;
+            _isAdLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (error) {
+          setState(() => _isAdLoaded = false);
+        },
+      ),
+    );
+  }
+
+  void _showRewardedAd() {
+    if (_isAdLoaded && _rewardedAd != null) {
+      _rewardedAd!.show(onUserEarnedReward: (ad, reward) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You earned reward from Ad!'), backgroundColor: Colors.green),
+        );
+        _loadRewardedAd();
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ad is still loading. Please try again in a moment.'), backgroundColor: Colors.orange),
+      );
+      _loadRewardedAd();
+    }
+  }
 
   Future<String?> _getDeviceHardwareId() async {
     final deviceInfo = DeviceInfoPlugin();
@@ -235,7 +283,6 @@ class _EarnScreenState extends State<EarnScreen> {
       if (user == null) return;
 
       final deviceId = await _getDeviceHardwareId();
-
       final response = await _supabase.rpc(
         'apply_referral_code',
         params: {
@@ -310,19 +357,13 @@ class _EarnScreenState extends State<EarnScreen> {
                 controller: amountController,
                 keyboardType: TextInputType.number,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Amount (Coins)',
-                  labelStyle: TextStyle(color: Colors.grey),
-                ),
+                decoration: const InputDecoration(labelText: 'Amount (Coins)', labelStyle: TextStyle(color: Colors.grey)),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: upiController,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'UPI ID / Phone Number',
-                  labelStyle: TextStyle(color: Colors.grey),
-                ),
+                decoration: const InputDecoration(labelText: 'UPI ID / Phone Number', labelStyle: TextStyle(color: Colors.grey)),
               ),
             ],
           ),
@@ -500,11 +541,11 @@ class _EarnScreenState extends State<EarnScreen> {
           },
         ),
         _buildActionCard(
-          title: "Daily Bonus",
-          subtitle: "Claim every 24h",
-          icon: Icons.card_giftcard,
+          title: "Watch Ads",
+          subtitle: "Earn via AdMob",
+          icon: Icons.play_circle_filled,
           color: Colors.green,
-          onTap: _isClaimingDaily ? () {} : _claimDailyBonus,
+          onTap: _showRewardedAd,
         ),
       ],
     );
@@ -604,6 +645,17 @@ class _EarnScreenState extends State<EarnScreen> {
                   
                   const SizedBox(height: 24),
                   
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      minimumSize: const Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _isClaimingDaily ? null : _claimDailyBonus,
+                    child: const Text('Claim Daily Bonus (50 Coins)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+
+                  const SizedBox(height: 24),
                   const Text('Earn Coins', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 12),
                   
@@ -684,7 +736,6 @@ class _EarnScreenState extends State<EarnScreen> {
             },
           ),
           const SizedBox(height: 24),
-          
           _buildWithdrawalSection(context, user!.id),
           const SizedBox(height: 24),
         ],
