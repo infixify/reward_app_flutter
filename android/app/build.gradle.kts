@@ -1,6 +1,8 @@
 plugins {
         id("com.android.application")
             id("dev.flutter.flutter-gradle-plugin")
+                // Firebase ke liye yeh plugin zaroori hai (google-services.json ke saath):
+                    // id("com.google.gms.google-services")
 }
 
 android {
@@ -17,33 +19,30 @@ android {
                                     applicationId = "com.example.reward_app_flutter"
                                             minSdk = 24
                                                     targetSdk = flutter.targetSdkVersion
-                                                            versionCode = flutter.versionCode.ToInt()
+                                                            versionCode = flutter.versionCode
                                                                     versionName = flutter.versionName
                                                                             multiDexEnabled = true
                         }
 
-                            signingConfigs {
-                                        create("release") {
-                                                        storeFile = file("debug.keystore")
-                                                                    storePassword = "android"
-                                                                                keyAlias = "androiddebugkey"
-                                                                                            keyPassword = "android"
+                            buildTypes {
+                                        release {
+                                                        // Abhi debug signing use ho rahi hai taaki missing-keystore
+                                                                    // error na aaye aur APK reliably build ho.
+                                                                                // Play Store release ke waqt apna khud ka upload keystore
+                                                                                            // banakar yahan use karein.
+                                                                                                        signingConfig = signingConfigs.getByName("debug")
                                         }
                             }
 
-                                buildTypes {
-                                            release {
-                                                            signingConfig = signingConfigs.getByName("release")
+                                kotlin {
+                                            compilerOptions {
+                                                            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
                                             }
                                 }
-
-                                    kotlin {
-                                                compilerOptions {
-                                                                jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-                                                }
-                                    }
-
-                                        flutter {
-                                                    source = "../.."
-                                        }
 }
+
+// IMPORTANT: yeh block android{} ke BAHAR hona chahiye, andar nahi.
+flutter {
+        source = "../.."
+}
+
