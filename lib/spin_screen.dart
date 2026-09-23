@@ -14,14 +14,19 @@ class _SpinScreenState extends State<SpinScreen> {
   StreamController<int> selected = StreamController<int>();
   final List<int> rewards = [10, 5, 20, 0, 50, 15, 5, 25];
   bool isSpinning = false;
+  
+  // Naya variable jo error fix karne ke liye add kiya gaya hai
+  int _winningIndex = 0; 
+  
   final supabase = Supabase.instance.client;
 
   Future<void> handleSpin() async {
     if (isSpinning) return;
     setState(() => isSpinning = true);
     
-    final winningIndex = Random().nextInt(rewards.length);
-    selected.add(winningIndex);
+    // Yahan index generate karke variable mein save kar rahe hain
+    _winningIndex = Random().nextInt(rewards.length);
+    selected.add(_winningIndex);
   }
 
   Future<void> claimReward(int amount) async {
@@ -72,8 +77,8 @@ class _SpinScreenState extends State<SpinScreen> {
                   for (var it in rewards) FortuneItem(child: Text('$it Coins', style: const TextStyle(fontWeight: FontWeight.bold))),
                 ],
                 onAnimationEnd: () {
-                  // Animation complete hone par reward fetch karo
-                  claimReward(rewards[selected.stream.value]); 
+                  // Yahan seedha variable use kar rahe hain (Error fixed)
+                  claimReward(rewards[_winningIndex]); 
                 },
               ),
             ),
