@@ -231,6 +231,30 @@ class _EarnScreenState extends State<EarnScreen> {
   bool _isAdLoading = false;
   bool _isClaimingDaily = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _saveFcmToken(); // App khulte hi FCM token DB me save hoga
+  }
+
+  // Naya Function: FCM Token Database me Save karne ke liye
+  Future<void> _saveFcmToken() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      final token = await messaging.getToken();
+      final user = _supabase.auth.currentUser;
+      
+      if (token != null && user != null) {
+        await _supabase.from('users').update({
+          'fcm_token': token
+        }).eq('id', user.id);
+        print('FCM Token saved to database successfully!');
+      }
+    } catch (e) {
+      print('FCM Token save error: $e');
+    }
+  }
+
   Future<String?> _getDeviceHardwareId() async {
     final deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) {
@@ -282,7 +306,6 @@ class _EarnScreenState extends State<EarnScreen> {
     }
   }
 
-  // Naya Function: Daily Bonus Claim karne ke liye
   Future<void> _claimDailyBonus() async {
     if (_isClaimingDaily) return;
     setState(() => _isClaimingDaily = true);
@@ -525,7 +548,6 @@ class _EarnScreenState extends State<EarnScreen> {
     );
   }
 
-  // Earning Grid - Links Connected!
   Widget _buildEarningGrid(BuildContext context) {
     return GridView.count(
       crossAxisCount: 2,
@@ -540,7 +562,6 @@ class _EarnScreenState extends State<EarnScreen> {
           icon: Icons.rotate_right,
           color: Colors.deepPurpleAccent,
           onTap: () {
-            // Nayi SpinScreen par navigation
             Navigator.push(context, MaterialPageRoute(builder: (_) => const SpinScreen()));
           },
         ),
@@ -550,7 +571,6 @@ class _EarnScreenState extends State<EarnScreen> {
           icon: Icons.layers,
           color: Colors.amber.shade700,
           onTap: () {
-            // Nayi ScratchScreen par navigation
             Navigator.push(context, MaterialPageRoute(builder: (_) => const ScratchScreen()));
           },
         ),
@@ -672,7 +692,6 @@ class _EarnScreenState extends State<EarnScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Wallet Section
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -693,11 +712,9 @@ class _EarnScreenState extends State<EarnScreen> {
                   
                   const SizedBox(height: 24),
                   
-                  // EARNING SECTION
                   const Text('Earn Coins', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 12),
                   
-                  // Watch Ads Banner
                   InkWell(
                     onTap: _isAdLoading ? null : _loadRewardedAd,
                     borderRadius: BorderRadius.circular(16),
@@ -732,12 +749,10 @@ class _EarnScreenState extends State<EarnScreen> {
 
                   const SizedBox(height: 16),
                   
-                  // 3x2 Feature Grid
                   _buildEarningGrid(context),
                   
                   const SizedBox(height: 32),
 
-                  // Referral Section
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
