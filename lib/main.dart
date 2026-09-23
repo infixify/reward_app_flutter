@@ -14,16 +14,51 @@ const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+  };
+
+  String? initError;
+
   try {
     await Firebase.initializeApp();
     await MobileAds.instance.initialize();
     await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
-  } catch (e) {
-    debugPrint("Initialization Error: $e");
+  } catch (e, stack) {
+    initError = "Error: $e\n\nStack: $stack";
+    debugPrint(initError);
   }
 
-  runApp(const RewardApp());
+  if (initError != null) {
+    runApp(ErrorScreenApp(message: initError));
+  } else {
+    runApp(const RewardApp());
+  }
+}
+
+class ErrorScreenApp extends StatelessWidget {
+  final String message;
+  const ErrorScreenApp({super.key, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: SelectableText(
+              message,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class RewardApp extends StatelessWidget {
