@@ -74,7 +74,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 }
 
 // ==========================================
-// GOOGLE LOGIN SCREEN (No changes made here)
+// GOOGLE LOGIN SCREEN
 // ==========================================
 class GoogleLoginScreen extends StatefulWidget {
   const GoogleLoginScreen({super.key});
@@ -208,7 +208,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
 }
 
 // ==========================================
-// EARN SCREEN (Updated with Grid & New Ads UI)
+// EARN SCREEN
 // ==========================================
 class EarnScreen extends StatefulWidget {
   const EarnScreen({super.key});
@@ -320,7 +320,6 @@ class _EarnScreenState extends State<EarnScreen> {
           final user = _supabase.auth.currentUser;
           if (user == null) return;
 
-          // Note: Later we will replace this direct update with the RPC limit function
           final currentResp = await _supabase.from('users').select('coin_balance').eq('id', user.id).single();
           int currentBalance = currentResp['coin_balance'] ?? 0;
           
@@ -342,7 +341,6 @@ class _EarnScreenState extends State<EarnScreen> {
   }
 
   Widget _buildWithdrawalSection(BuildContext context, String userId) {
-    // (Existing Withdrawal logic kept exactly the same)
     final TextEditingController amountController = TextEditingController();
     final TextEditingController upiController = TextEditingController();
 
@@ -489,7 +487,7 @@ class _EarnScreenState extends State<EarnScreen> {
     );
   }
 
-  // New Earning Grid Widget
+  // UPDATED: 3x2 Earning Grid with Surveys & Daily Bonus
   Widget _buildEarningGrid(BuildContext context) {
     return GridView.count(
       crossAxisCount: 2,
@@ -539,6 +537,28 @@ class _EarnScreenState extends State<EarnScreen> {
           onTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Offerwall Integration Pending')),
+            );
+          },
+        ),
+        _buildActionCard(
+          title: "Surveys",
+          subtitle: "High paying tasks",
+          icon: Icons.poll,
+          color: Colors.pinkAccent,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Survey Partners Pending')),
+            );
+          },
+        ),
+        _buildActionCard(
+          title: "Daily Bonus",
+          subtitle: "Claim every 24h",
+          icon: Icons.card_giftcard,
+          color: Colors.green,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Daily Bonus Coming Soon!')),
             );
           },
         ),
@@ -641,7 +661,7 @@ class _EarnScreenState extends State<EarnScreen> {
                   
                   const SizedBox(height: 24),
                   
-                  // NEW EARNING SECTION (Ads + Grid)
+                  // EARNING SECTION
                   const Text('Earn Coins', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 12),
                   
@@ -680,7 +700,7 @@ class _EarnScreenState extends State<EarnScreen> {
 
                   const SizedBox(height: 16),
                   
-                  // 2x2 Feature Grid
+                  // 3x2 Feature Grid
                   _buildEarningGrid(context),
                   
                   const SizedBox(height: 32),
