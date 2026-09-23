@@ -3,9 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 // Nayi screens ke imports
 import 'spin_screen.dart';
@@ -17,50 +14,10 @@ const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  try {
-    // 1. Supabase Init
-    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
-    
-    // 2. AdMob Init
-    MobileAds.instance.initialize();
-    
-    // 3. Firebase Init
-    await Firebase.initializeApp();
-    final messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-    final String? fcmToken = await messaging.getToken();
-    print('FCM Token for this device: $fcmToken');
-
-    // Agar sab theek raha toh app normal chalegi
-    runApp(const RewardApp());
-    
-  } catch (e, stackTrace) {
-    // Agar koi crash hua toh seedha screen par print hoga
-    runApp(
-      MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          backgroundColor: Colors.black,
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: SingleChildScrollView(
-                child: Text(
-                  'APP STARTUP ERROR:\n\n$e\n\n$stackTrace',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.left,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  // Sirf Supabase initialize karein taaki app 100% stable chale bina kisi crash ke
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
+  
+  runApp(const RewardApp());
 }
 
 class RewardApp extends StatelessWidget {
@@ -254,34 +211,7 @@ class _EarnScreenState extends State<EarnScreen> {
   final _supabase = Supabase.instance.client;
   final TextEditingController _referralController = TextEditingController();
   bool isApplyingReferral = false;
-
-  // AdMob Rewarded Ad variables
-  RewardedAd? _rewardedAd;
-  bool _isAdLoading = false;
   bool _isClaimingDaily = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _saveFcmToken(); 
-  }
-
-  Future<void> _saveFcmToken() async {
-    try {
-      final messaging = FirebaseMessaging.instance;
-      final token = await messaging.getToken();
-      final user = _supabase.auth.currentUser;
-      
-      if (token != null && user != null) {
-        await _supabase.from('users').update({
-          'fcm_token': token
-        }).eq('id', user.id);
-        print('FCM Token saved to database successfully!');
-      }
-    } catch (e) {
-      print('FCM Token save error: $e');
-    }
-  }
 
   Future<String?> _getDeviceHardwareId() async {
     final deviceInfo = DeviceInfoPlugin();
@@ -361,70 +291,6 @@ class _EarnScreenState extends State<EarnScreen> {
     } finally {
       if (mounted) setState(() => _isClaimingDaily = false);
     }
-  }
-
-  void _loadRewardedAd() {
-    setState(() => _isAdLoading = true);
-    
-    const adUnitId = 'ca-app-pub-3940256099942544/5224354917'; 
-
-    RewardedAd.load(
-      adUnitId: adUnitId,
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (RewardedAd ad) {
-          _rewardedAd = ad;
-          setState(() => _isAdLoading = false);
-          _showRewardedAd();
-        },
-        onAdFailedToLoad: (LoadAdError error) {
-          setState(() => _isAdLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Ad failed to load. Please try again later.'), backgroundColor: Colors.redAccent),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showRewardedAd() {
-    if (_rewardedAd == null) return;
-
-    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (RewardedAd ad) {
-        ad.dispose();
-      },
-      onAdFailedToShowFullScreenContent: (RewardedAd ad, AdError error) {
-        ad.dispose();
-      },
-    );
-
-    _rewardedAd!.show(
-      onUserEarnedReward: (AdWithoutView ad, RewardItem reward) async {
-        try {
-          final user = _supabase.auth.currentUser;
-          if (user == null) return;
-
-          final response = await _supabase.rpc('claim_reward_action', params: {
-            'p_user_id': user.id,
-            'p_action_type': 'ad',
-            'p_reward_amount': 10,
-          });
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response['message']), 
-              backgroundColor: response['success'] == true ? Colors.green : Colors.redAccent,
-            ),
-          );
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error crediting reward: ${e.toString()}'), backgroundColor: Colors.redAccent),
-          );
-        }
-      },
-    );
-    _rewardedAd = null;
   }
 
   Widget _buildWithdrawalSection(BuildContext context, String userId) {
@@ -740,40 +606,6 @@ class _EarnScreenState extends State<EarnScreen> {
                   
                   const Text('Earn Coins', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 12),
-                  
-                  InkWell(
-                    onTap: _isAdLoading ? null : _loadRewardedAd,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.indigoAccent.withOpacity(0.1),
-                        border: Border.all(color: Colors.indigoAccent.withOpacity(0.5)),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.ondemand_video, color: Colors.indigoAccent, size: 36),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(_isAdLoading ? 'Loading Ad...' : 'Watch Video Ads', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-                                const SizedBox(height: 4),
-                                const Text("50 daily limit • 60s cooldown", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          if (_isAdLoading)
-                            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.indigoAccent)),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
                   
                   _buildEarningGrid(context),
                   
