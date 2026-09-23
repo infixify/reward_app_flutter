@@ -73,6 +73,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 }
 
+// ==========================================
+// GOOGLE LOGIN SCREEN (No changes made here)
+// ==========================================
 class GoogleLoginScreen extends StatefulWidget {
   const GoogleLoginScreen({super.key});
 
@@ -204,6 +207,9 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
   }
 }
 
+// ==========================================
+// EARN SCREEN (Updated with Grid & New Ads UI)
+// ==========================================
 class EarnScreen extends StatefulWidget {
   const EarnScreen({super.key});
 
@@ -302,11 +308,9 @@ class _EarnScreenState extends State<EarnScreen> {
     _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (RewardedAd ad) {
         ad.dispose();
-        _loadRewardedAd();
       },
       onAdFailedToShowFullScreenContent: (RewardedAd ad, AdError error) {
         ad.dispose();
-        _loadRewardedAd();
       },
     );
 
@@ -316,6 +320,7 @@ class _EarnScreenState extends State<EarnScreen> {
           final user = _supabase.auth.currentUser;
           if (user == null) return;
 
+          // Note: Later we will replace this direct update with the RPC limit function
           final currentResp = await _supabase.from('users').select('coin_balance').eq('id', user.id).single();
           int currentBalance = currentResp['coin_balance'] ?? 0;
           
@@ -337,6 +342,7 @@ class _EarnScreenState extends State<EarnScreen> {
   }
 
   Widget _buildWithdrawalSection(BuildContext context, String userId) {
+    // (Existing Withdrawal logic kept exactly the same)
     final TextEditingController amountController = TextEditingController();
     final TextEditingController upiController = TextEditingController();
 
@@ -483,6 +489,97 @@ class _EarnScreenState extends State<EarnScreen> {
     );
   }
 
+  // New Earning Grid Widget
+  Widget _buildEarningGrid(BuildContext context) {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      children: [
+        _buildActionCard(
+          title: "Spin to Win",
+          subtitle: "30 daily spins",
+          icon: Icons.rotate_right,
+          color: Colors.deepPurpleAccent,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Spin Wheel Coming Soon!')),
+            );
+          },
+        ),
+        _buildActionCard(
+          title: "Scratch Cards",
+          subtitle: "30 daily cards",
+          icon: Icons.layers,
+          color: Colors.amber.shade700,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Scratch Cards Coming Soon!')),
+            );
+          },
+        ),
+        _buildActionCard(
+          title: "Playtime Games",
+          subtitle: "Earn per minute",
+          icon: Icons.sports_esports,
+          color: Colors.teal,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Playtime Integration Pending')),
+            );
+          },
+        ),
+        _buildActionCard(
+          title: "Offerwall",
+          subtitle: "Complete tasks",
+          icon: Icons.assignment_turned_in,
+          color: Colors.blueAccent,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Offerwall Integration Pending')),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.5)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              backgroundColor: color.withOpacity(0.2),
+              radius: 26,
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(height: 10),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+            const SizedBox(height: 4),
+            Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _supabase.auth.currentUser;
@@ -491,6 +588,7 @@ class _EarnScreenState extends State<EarnScreen> {
       appBar: AppBar(
         title: const Text('TaskRewards Dashboard'),
         backgroundColor: const Color(0xFF1E293B),
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.redAccent),
@@ -508,7 +606,10 @@ class _EarnScreenState extends State<EarnScreen> {
             stream: _supabase.from('users').stream(primaryKey: ['id']).eq('id', user!.id),
             builder: (context, snapshot) {
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const Card(child: Padding(padding: EdgeInsets.all(24.0), child: Center(child: CircularProgressIndicator())));
+                return const Card(
+                  color: Color(0xFF1E293B),
+                  child: Padding(padding: EdgeInsets.all(24.0), child: Center(child: CircularProgressIndicator()))
+                );
               }
 
               final userData = snapshot.data!.first;
@@ -517,7 +618,9 @@ class _EarnScreenState extends State<EarnScreen> {
               final hasUsedReferral = userData['referred_by'] != null;
 
               return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Wallet Section
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -535,7 +638,54 @@ class _EarnScreenState extends State<EarnScreen> {
                       ],
                     ),
                   ),
+                  
                   const SizedBox(height: 24),
+                  
+                  // NEW EARNING SECTION (Ads + Grid)
+                  const Text('Earn Coins', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 12),
+                  
+                  // Watch Ads Banner
+                  InkWell(
+                    onTap: _isAdLoading ? null : _loadRewardedAd,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.indigoAccent.withOpacity(0.1),
+                        border: Border.all(color: Colors.indigoAccent.withOpacity(0.5)),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.ondemand_video, color: Colors.indigoAccent, size: 36),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(_isAdLoading ? 'Loading Ad...' : 'Watch Video Ads', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+                                const SizedBox(height: 4),
+                                const Text("50 daily limit • 60s cooldown", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                          if (_isAdLoading)
+                            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.indigoAccent)),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+                  
+                  // 2x2 Feature Grid
+                  _buildEarningGrid(context),
+                  
+                  const SizedBox(height: 32),
+
+                  // Referral Section
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -610,20 +760,8 @@ class _EarnScreenState extends State<EarnScreen> {
           ),
           const SizedBox(height: 24),
           
-          _buildWithdrawalSection(context, user.id),
-
+          _buildWithdrawalSection(context, user!.id),
           const SizedBox(height: 24),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigoAccent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            icon: const Icon(Icons.video_library),
-            label: Text(_isAdLoading ? 'Loading Ad...' : 'Watch Ad (+10 Coins)', style: const TextStyle(fontSize: 16)),
-            onPressed: _isAdLoading ? null : _loadRewardedAd,
-          ),
         ],
       ),
     );
