@@ -135,7 +135,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn.instance;
       await googleSignIn.initialize(
-        serverClientId: '881444436109-k398gv3fnl238ah3s1bbom8v5bdod55t.apps.googleusercontent.com',
+        serverClientId: '727476527324-ckdf5sn021jqp8esq3bom5luo0kmmh8m.apps.googleusercontent.com',
       );
 
       final googleUser = await googleSignIn.authenticate();
