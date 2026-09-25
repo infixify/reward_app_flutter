@@ -12,6 +12,8 @@ import 'support_screen.dart';
 const supabaseUrl = 'https://figpskarzodfeiaulmfa.supabase.co';
 const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 
+const int kMinWithdrawalCoins = 5000;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -164,10 +166,10 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
     } catch (e) {
       await _supabase.auth.signOut();
       await GoogleSignIn.instance.signOut();
-      
+
       String rawError = e.toString().replaceAll('Exception: ', '');
       String cleanMessage = rawError;
-      
+
       if (rawError.contains('GoogleSignInExceptionCode.canceled') || rawError.contains('code 16')) {
         cleanMessage = 'Google Sign-In was canceled or re-auth failed. Please try again.';
       }
@@ -256,9 +258,28 @@ class _EarnScreenState extends State<EarnScreen> {
   RewardedAd? _rewardedAd;
   bool _isAdLoaded = false;
 
+  // Created once in initState instead of inline in build() to stop the
+  // wallet balance / withdrawal history from re-subscribing (and flickering)
+  // on every setState() in this screen.
+  late final Stream<List<Map<String, dynamic>>> _userStream;
+  late final Stream<List<Map<String, dynamic>>> _withdrawalsStream;
+
   @override
   void initState() {
     super.initState();
+    final userId = _supabase.auth.currentUser!.id;
+
+    _userStream = _supabase
+        .from('users')
+        .stream(primaryKey: ['id'])
+        .eq('id', userId);
+
+    _withdrawalsStream = _supabase
+        .from('withdrawals')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+
     _loadRewardedAd();
     _setupPushNotifications();
   }
@@ -267,14 +288,12 @@ class _EarnScreenState extends State<EarnScreen> {
     try {
       final messaging = FirebaseMessaging.instance;
 
-      // Ask user for notification permission (Android 13+/iOS)
       await messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
 
-      // Get the device's FCM token and save it against this user
       final token = await messaging.getToken();
       final user = _supabase.auth.currentUser;
       if (token != null && user != null) {
@@ -283,7 +302,6 @@ class _EarnScreenState extends State<EarnScreen> {
         }).eq('id', user.id);
       }
 
-      // Keep the token updated if it ever refreshes
       messaging.onTokenRefresh.listen((newToken) async {
         final currentUser = _supabase.auth.currentUser;
         if (currentUser != null) {
@@ -293,7 +311,6 @@ class _EarnScreenState extends State<EarnScreen> {
         }
       });
 
-      // Show a snackbar when a notification arrives while app is open
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         if (mounted && message.notification != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -412,7 +429,7 @@ class _EarnScreenState extends State<EarnScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(response['message']), 
+          content: Text(response['message']),
           backgroundColor: response['success'] == true ? Colors.green : Colors.orangeAccent,
         ),
       );
@@ -451,6 +468,11 @@ class _EarnScreenState extends State<EarnScreen> {
                 decoration: const InputDecoration(labelText: 'UPI ID / Phone Number', labelStyle: TextStyle(color: Colors.grey)),
               ),
               const SizedBox(height: 12),
+              Text(
+                'Minimum withdrawal: $kMinWithdrawalCoins Coins (₹${kMinWithdrawalCoins ~/ 100})',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 4),
               const Text(
                 'Withdrawal can take from 24 - 72 hours (1-3 business working days)',
                 style: TextStyle(color: Colors.grey, fontSize: 12),
@@ -475,10 +497,20 @@ class _EarnScreenState extends State<EarnScreen> {
                   return;
                 }
 
+                if (amount < kMinWithdrawalCoins) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Minimum withdrawal is $kMinWithdrawalCoins Coins (₹${kMinWithdrawalCoins ~/ 100}).'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                  return;
+                }
+
                 try {
                   await _supabase.from('withdrawals').insert({
                     'user_id': userId,
-                    'amount': amount,
+                    'coins_deducted': amount,
                     'method': 'UPI',
                     'payout_details': upi,
                     'status': 'pending',
@@ -523,17 +555,13 @@ class _EarnScreenState extends State<EarnScreen> {
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Withdrawal can take from 24 - 72 hours (1-3 business working days)',
-            style: TextStyle(color: Colors.grey, fontSize: 12),
+          Text(
+            'Minimum withdrawal: $kMinWithdrawalCoins Coins (₹${kMinWithdrawalCoins ~/ 100}). Takes 24 - 72 hours (1-3 business working days).',
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
           ),
           const SizedBox(height: 12),
           StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _supabase
-                .from('withdrawals')
-                .stream(primaryKey: ['id'])
-                .eq('user_id', userId)
-                .order('created_at', ascending: false),
+            stream: _withdrawalsStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
@@ -550,7 +578,7 @@ class _EarnScreenState extends State<EarnScreen> {
                 itemCount: withdrawals.length,
                 itemBuilder: (context, index) {
                   final item = withdrawals[index];
-                  final amount = item['amount'];
+                  final amount = item['coins_deducted'];
                   final status = item['status'];
                   final upi = item['payout_details'];
 
@@ -563,7 +591,7 @@ class _EarnScreenState extends State<EarnScreen> {
                     margin: const EdgeInsets.symmetric(vertical: 6),
                     child: ListTile(
                       title: Text('$amount Coins ($upi)', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                      subtitle: Text('Status: ${status.toUpperCase()}', style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                      subtitle: Text('Status: ${status.toString().toUpperCase()}', style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
                       trailing: const Icon(Icons.history, color: Colors.grey),
                     ),
                   );
@@ -692,7 +720,7 @@ class _EarnScreenState extends State<EarnScreen> {
         padding: const EdgeInsets.all(16.0),
         children: [
           StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _supabase.from('users').stream(primaryKey: ['id']).eq('id', user!.id),
+            stream: _userStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return const Card(
@@ -726,9 +754,9 @@ class _EarnScreenState extends State<EarnScreen> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
@@ -742,9 +770,9 @@ class _EarnScreenState extends State<EarnScreen> {
                   const SizedBox(height: 24),
                   const Text('Earn Coins', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 12),
-                  
+
                   _buildEarningGrid(context),
-                  
+
                   const SizedBox(height: 32),
 
                   Container(
@@ -801,7 +829,7 @@ class _EarnScreenState extends State<EarnScreen> {
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                 ),
                                 onPressed: isApplyingReferral ? null : _applyReferralCode,
-                                child: isApplyingReferral 
+                                child: isApplyingReferral
                                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                     : const Text('Apply', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                               ),
