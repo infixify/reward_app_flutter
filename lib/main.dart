@@ -2,9 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
+import 'support_screen.dart';
 
 const supabaseUrl = 'https://figpskarzodfeiaulmfa.supabase.co';
 const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
@@ -257,6 +260,56 @@ class _EarnScreenState extends State<EarnScreen> {
   void initState() {
     super.initState();
     _loadRewardedAd();
+    _setupPushNotifications();
+  }
+
+  Future<void> _setupPushNotifications() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+
+      // Ask user for notification permission (Android 13+/iOS)
+      await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      // Get the device's FCM token and save it against this user
+      final token = await messaging.getToken();
+      final user = _supabase.auth.currentUser;
+      if (token != null && user != null) {
+        await _supabase.from('users').update({
+          'fcm_token': token,
+        }).eq('id', user.id);
+      }
+
+      // Keep the token updated if it ever refreshes
+      messaging.onTokenRefresh.listen((newToken) async {
+        final currentUser = _supabase.auth.currentUser;
+        if (currentUser != null) {
+          await _supabase.from('users').update({
+            'fcm_token': newToken,
+          }).eq('id', currentUser.id);
+        }
+      });
+
+      // Show a snackbar when a notification arrives while app is open
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (mounted && message.notification != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${message.notification!.title ?? ''}: ${message.notification!.body ?? ''}',
+              ),
+              backgroundColor: const Color(0xFF1E293B),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint('Push notification setup error: $e');
+    }
   }
 
   void _loadRewardedAd() {
@@ -619,6 +672,13 @@ class _EarnScreenState extends State<EarnScreen> {
         backgroundColor: const Color(0xFF1E293B),
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.support_agent, color: Colors.indigoAccent),
+            tooltip: 'Support',
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportScreen()));
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.redAccent),
             onPressed: () async {
