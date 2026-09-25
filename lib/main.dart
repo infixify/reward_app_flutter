@@ -479,8 +479,8 @@ class _EarnScreenState extends State<EarnScreen> {
                   await _supabase.from('withdrawals').insert({
                     'user_id': userId,
                     'amount': amount,
-                    'payment_method': 'UPI',
-                    'payment_details': upi,
+                    'method': 'UPI',
+                    'payout_details': upi,
                     'status': 'pending',
                   });
 
@@ -552,7 +552,7 @@ class _EarnScreenState extends State<EarnScreen> {
                   final item = withdrawals[index];
                   final amount = item['amount'];
                   final status = item['status'];
-                  final upi = item['payment_details'];
+                  final upi = item['payout_details'];
 
                   Color statusColor = Colors.orange;
                   if (status == 'approved') statusColor = Colors.green;
