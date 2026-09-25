@@ -14,6 +14,16 @@ const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 
 const int kMinWithdrawalCoins = 5000;
 
+/// Logs the full technical error (visible in device/dev logs) and returns a
+/// short, clean message safe to show to the user in a SnackBar.
+String friendlyErrorMessage(Object e) {
+  debugPrint('Error: $e');
+  if (e is PostgrestException) {
+    return e.message;
+  }
+  return 'Something went wrong. Please try again.';
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -406,7 +416,7 @@ class _EarnScreenState extends State<EarnScreen> {
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'), backgroundColor: Colors.redAccent),
+        SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.redAccent),
       );
     } finally {
       if (mounted) setState(() => isApplyingReferral = false);
@@ -435,7 +445,7 @@ class _EarnScreenState extends State<EarnScreen> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.redAccent),
+        SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.redAccent),
       );
     } finally {
       if (mounted) setState(() => _isClaimingDaily = false);
@@ -522,7 +532,7 @@ class _EarnScreenState extends State<EarnScreen> {
                   );
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.redAccent),
+                    SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.redAccent),
                   );
                 }
               },
