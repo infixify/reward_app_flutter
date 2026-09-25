@@ -6,9 +6,6 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import 'spin_screen.dart';
-import 'scratch_screen.dart';
-
 const supabaseUrl = 'https://figpskarzodfeiaulmfa.supabase.co';
 const supabaseKey = 'sb_publishable_OlHhzoYHI7lz84y-LSNFOg_S0s3EH0C';
 
@@ -400,6 +397,11 @@ class _EarnScreenState extends State<EarnScreen> {
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(labelText: 'UPI ID / Phone Number', labelStyle: TextStyle(color: Colors.grey)),
               ),
+              const SizedBox(height: 12),
+              const Text(
+                'Withdrawal can take from 24 - 72 hours (1-3 business working days)',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
             ],
           ),
           actions: [
@@ -467,6 +469,11 @@ class _EarnScreenState extends State<EarnScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 6),
+          const Text(
+            'Withdrawal can take from 24 - 72 hours (1-3 business working days)',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
           const SizedBox(height: 12),
           StreamBuilder<List<Map<String, dynamic>>>(
             stream: _supabase
@@ -524,24 +531,6 @@ class _EarnScreenState extends State<EarnScreen> {
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
       children: [
-        _buildActionCard(
-          title: "Spin to Win",
-          subtitle: "30 daily spins",
-          icon: Icons.rotate_right,
-          color: Colors.deepPurpleAccent,
-          onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const SpinScreen()));
-          },
-        ),
-        _buildActionCard(
-          title: "Scratch Cards",
-          subtitle: "30 daily cards",
-          icon: Icons.layers,
-          color: Colors.amber.shade700,
-          onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const ScratchScreen()));
-          },
-        ),
         _buildActionCard(
           title: "Playtime Games",
           subtitle: "Earn per minute",
