@@ -750,7 +750,7 @@ class _EarnScreenState extends State<EarnScreen> {
                         const SizedBox(height: 10),
                         Text('$balance Coins', style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 12),
-                        Text('${user.email}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                        Text('${user!.email ?? ''}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
                       ],
                     ),
                   ),
