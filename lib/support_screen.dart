@@ -13,6 +13,18 @@ class _SupportScreenState extends State<SupportScreen> {
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   bool _isSubmitting = false;
+  late final Stream<List<Map<String, dynamic>>> _ticketsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = _supabase.auth.currentUser;
+    _ticketsStream = _supabase
+        .from('support_tickets')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', user!.id)
+        .order('created_at', ascending: false);
+  }
 
   Future<void> _submitTicket() async {
     final subject = _subjectController.text.trim();
@@ -67,8 +79,6 @@ class _SupportScreenState extends State<SupportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = _supabase.auth.currentUser;
-
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
@@ -144,11 +154,7 @@ class _SupportScreenState extends State<SupportScreen> {
           ),
           const SizedBox(height: 12),
           StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _supabase
-                .from('support_tickets')
-                .stream(primaryKey: ['id'])
-                .eq('user_id', user!.id)
-                .order('created_at', ascending: false),
+            stream: _ticketsStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
